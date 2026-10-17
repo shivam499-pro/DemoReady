@@ -61,17 +61,27 @@ def find_first_existing(target_path: Path, candidates: List[str]) -> Optional[Pa
     return None
 
 
+def find_all_existing(target_path: Path, candidates: List[str]) -> List[Path]:
+    existing: List[Path] = []
+    for candidate in candidates:
+        p = target_path / candidate
+        if p.exists() and p.is_file():
+            existing.append(p)
+    return existing
+
+
 def run_environment_checks(target_path: Path) -> List[CheckResult]:
     """
-    Evaluate environment configuration parity without ever revealing secret values.
+    Evaluate environment configuration parity across layered environment files
+    (.env, .env.local) without ever reading or revealing secret values.
     """
     template_path = find_first_existing(target_path, ENV_TEMPLATE_CANDIDATES)
-    env_path = find_first_existing(target_path, ENV_FILE_CANDIDATES)
+    existing_env_files = find_all_existing(target_path, ENV_FILE_CANDIDATES)
 
     results: List[CheckResult] = []
 
-    # Case 1: Neither template nor .env found
-    if not template_path and not env_path:
+    # Case 1: Neither template nor any env files found
+    if not template_path and not existing_env_files:
         results.append(
             CheckResult(
                 name="Environment Configuration",
@@ -83,8 +93,8 @@ def run_environment_checks(target_path: Path) -> List[CheckResult]:
         )
         return results
 
-    # Case 2: Template exists but .env is missing
-    if template_path and not env_path:
+    # Case 2: Template exists but no env file exists
+    if template_path and not existing_env_files:
         template_keys = sorted(extract_variable_names(template_path))
         results.append(
             CheckResult(
@@ -101,33 +111,41 @@ def run_environment_checks(target_path: Path) -> List[CheckResult]:
         )
         return results
 
-    # Case 3: .env exists but no template exists
-    if env_path and not template_path:
-        env_keys = sorted(extract_variable_names(env_path))
+    # Aggregate variable names across all existing environment files
+    env_file_names = [f.name for f in existing_env_files]
+    target_env_label = " + ".join(env_file_names)
+    all_env_keys_set: Set[str] = set()
+    for ef in existing_env_files:
+        all_env_keys_set.update(extract_variable_names(ef))
+
+    # Case 3: Env file(s) exist but no template exists
+    if existing_env_files and not template_path:
+        env_keys = sorted(all_env_keys_set)
         results.append(
             CheckResult(
                 name="Environment Template Parity",
                 category="environment",
                 status=CheckStatus.WARNING,
-                message=f"Found {env_path.name} with {len(env_keys)} variables defined, but no example template was found.",
-                fix=f"Create a .env.example documenting variable names (without secret values) for reproducible setups.",
+                message=f"Found {target_env_label} with {len(env_keys)} variables defined, but no example template was found.",
+                fix="Create a .env.example documenting variable names (without secret values) for reproducible setups.",
                 details={
+                    "inspected_files": env_file_names,
                     "configured_variable_names": env_keys,
                 },
             )
         )
         return results
 
-    # Case 4: Both template and .env exist -> compare names
+    # Case 4: Both template and env file(s) exist -> compare names
     assert template_path is not None
-    assert env_path is not None
 
     template_keys_set = extract_variable_names(template_path)
-    env_keys_set = extract_variable_names(env_path)
 
-    missing_keys = sorted(template_keys_set - env_keys_set)
-    extra_keys = sorted(env_keys_set - template_keys_set)
-    matched_keys = sorted(template_keys_set & env_keys_set)
+    missing_keys = sorted(template_keys_set - all_env_keys_set)
+    extra_keys = sorted(all_env_keys_set - template_keys_set)
+    matched_keys = sorted(template_keys_set & all_env_keys_set)
+
+    primary_target = ".env.local" if ".env.local" in env_file_names else env_file_names[0]
 
     if missing_keys:
         missing_list_str = ", ".join(missing_keys)
@@ -136,9 +154,10 @@ def run_environment_checks(target_path: Path) -> List[CheckResult]:
                 name="Environment Variable Parity",
                 category="environment",
                 status=CheckStatus.WARNING,
-                message=f"Missing {len(missing_keys)} variable(s) in {env_path.name} that are specified in {template_path.name}.",
-                fix=f"Add missing variables to {env_path.name}: {missing_list_str} (do not commit secret values).",
+                message=f"Missing {len(missing_keys)} variable(s) in {target_env_label} that are specified in {template_path.name}.",
+                fix=f"Add missing variables to {primary_target}: {missing_list_str} (do not commit secret values).",
                 details={
+                    "inspected_files": env_file_names,
                     "missing_variable_names": missing_keys,
                     "matched_variable_names": matched_keys,
                     "extra_variable_names": extra_keys,
@@ -151,8 +170,9 @@ def run_environment_checks(target_path: Path) -> List[CheckResult]:
                 name="Environment Variable Parity",
                 category="environment",
                 status=CheckStatus.PASS,
-                message=f"All {len(template_keys_set)} variable(s) defined in {template_path.name} are present in {env_path.name}.",
+                message=f"All {len(template_keys_set)} variable(s) defined in {template_path.name} are present in {target_env_label}.",
                 details={
+                    "inspected_files": env_file_names,
                     "configured_variable_names": matched_keys,
                     "extra_variable_names": extra_keys,
                 },

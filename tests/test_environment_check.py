@@ -155,6 +155,111 @@ class TestEnvironmentCheck(unittest.TestCase):
                     self.assertNotIn(secret_value_2, r.fix)
                     self.assertNotIn(secret_value_3, r.fix)
 
+    def test_variable_split_between_env_and_env_local_no_false_warning(self):
+        """1. Variable split between .env and .env.local produces no false missing variable warning."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT=3000\nDATABASE_URL=\nAPI_KEY=\n", encoding="utf-8")
+            (td / ".env").write_text("PORT=3000\n", encoding="utf-8")
+            (td / ".env.local").write_text("DATABASE_URL=postgres://localhost:5432\nAPI_KEY=local_key\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertIn("All 3 variable(s)", results[0].message)
+            self.assertEqual(results[0].details["inspected_files"], [".env", ".env.local"])
+            self.assertEqual(
+                results[0].details["configured_variable_names"],
+                ["API_KEY", "DATABASE_URL", "PORT"],
+            )
+
+    def test_variable_present_in_both_files_counted_once(self):
+        """2. A variable present in both files is counted only once."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT=3000\nSHARED_CONFIG=\n", encoding="utf-8")
+            (td / ".env").write_text("PORT=3000\nSHARED_CONFIG=default\n", encoding="utf-8")
+            (td / ".env.local").write_text("PORT=8080\nSHARED_CONFIG=override\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            # Counted only once: 2 variables configured
+            self.assertEqual(
+                results[0].details["configured_variable_names"],
+                ["PORT", "SHARED_CONFIG"],
+            )
+
+    def test_only_env_exists(self):
+        """3. Only .env exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT=3000\nDATABASE_URL=\n", encoding="utf-8")
+            (td / ".env").write_text("PORT=3000\nDATABASE_URL=postgres://localhost:5432\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertEqual(results[0].details["inspected_files"], [".env"])
+            self.assertEqual(results[0].details["configured_variable_names"], ["DATABASE_URL", "PORT"])
+
+    def test_only_env_local_exists(self):
+        """4. Only .env.local exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT=3000\nAPI_KEY=\n", encoding="utf-8")
+            (td / ".env.local").write_text("PORT=3000\nAPI_KEY=local_val\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertEqual(results[0].details["inspected_files"], [".env.local"])
+            self.assertEqual(results[0].details["configured_variable_names"], ["API_KEY", "PORT"])
+
+    def test_neither_file_exists(self):
+        """5. Neither .env nor .env.local exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT=3000\nAPI_KEY=\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].status, CheckStatus.FAIL)
+            self.assertIn("no .env file exists", results[0].message)
+
+    def test_secret_value_from_either_file_never_leaks(self):
+        """6. Secret value from either file never appears in console or JSON output."""
+        env_secret = "SECRET_IN_ENV_FILE_11111"
+        env_local_secret = "SECRET_IN_ENV_LOCAL_FILE_22222"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("SECRET_A=\nSECRET_B=\nMISSING_C=\n", encoding="utf-8")
+            (td / ".env").write_text(f"SECRET_A={env_secret}\n", encoding="utf-8")
+            (td / ".env.local").write_text(f"SECRET_B={env_local_secret}\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            report = InspectionReport(target_path=str(td), results=results)
+
+            console_output = format_console_report(report)
+            json_output = format_json_report(report)
+            report_dict = report.to_dict()
+            dict_str = json.dumps(report_dict)
+
+            # Neither secret should appear in console, JSON, or dict
+            for secret in [env_secret, env_local_secret]:
+                self.assertNotIn(secret, console_output, f"Secret leaked in console: {secret}")
+                self.assertNotIn(secret, json_output, f"Secret leaked in JSON: {secret}")
+                self.assertNotIn(secret, dict_str, f"Secret leaked in dict: {secret}")
+
+            for r in results:
+                self.assertNotIn(env_secret, r.message)
+                self.assertNotIn(env_local_secret, r.message)
+                if r.fix:
+                    self.assertNotIn(env_secret, r.fix)
+                    self.assertNotIn(env_local_secret, r.fix)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.test_timeout <= 0:
+        parser.error("--test-timeout must be a positive integer.")
+
     target_dir = Path(args.path)
 
     report = run_inspection(

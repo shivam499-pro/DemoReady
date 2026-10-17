@@ -15,10 +15,22 @@ DEFAULT_PLACEHOLDER_SUBSTRINGS = [
     "not configured",
 ]
 
+EXACT_DUMMY_COMMANDS = {
+    "exit 1",
+    "exit 0",
+    "false",
+    "true",
+    ":",
+}
+
 
 def is_placeholder_test(command: str) -> bool:
     cleaned = command.strip().lower()
-    return any(p in cleaned for p in DEFAULT_PLACEHOLDER_SUBSTRINGS) or not cleaned
+    return (
+        any(p in cleaned for p in DEFAULT_PLACEHOLDER_SUBSTRINGS)
+        or cleaned in EXACT_DUMMY_COMMANDS
+        or not cleaned
+    )
 
 
 def check_test_script_configuration(pkg_data: Optional[Dict[str, Any]]) -> CheckResult:

@@ -37,6 +37,13 @@ class TestTestsConfigCheck(unittest.TestCase):
         self.assertIn("Placeholder test script detected", res.message)
         self.assertIsNotNone(res.fix)
 
+    def test_exact_dummy_scripts(self):
+        for dummy in ["exit 1", "exit 0", "false", "true"]:
+            pkg = {"name": "sample", "scripts": {"test": dummy}}
+            res = check_test_script_configuration(pkg)
+            self.assertEqual(res.status, CheckStatus.FAIL, f"Failed to flag dummy script: {dummy}")
+            self.assertIn("Placeholder test script detected", res.message)
+
     def test_valid_test_command(self):
         pkg_valid = {
             "name": "sample",

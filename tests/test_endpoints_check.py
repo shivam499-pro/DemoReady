@@ -66,6 +66,55 @@ class TestEndpointsCheck(unittest.TestCase):
             self.assertIn("no dedicated /health", static_check.message)
             self.assertIsNotNone(static_check.fix)
 
+    def test_real_javascript_commonjs_health_route(self):
+        """Verify real JavaScript CommonJS file with app.get('/health', ...) is detected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            server_js = td / "server.js"
+            server_js.write_text(
+                "const express = require('express');\n"
+                "const app = express();\n"
+                "app.get('/health', (req, res) => {\n"
+                "    res.status(200).json({ status: 'ok', uptime: process.uptime() });\n"
+                "});\n"
+                "app.listen(3000);\n",
+                encoding="utf-8",
+            )
+
+            results = run_endpoints_checks(td)
+            self.assertEqual(len(results), 2)
+            static_check = results[0]
+            self.assertEqual(static_check.status, CheckStatus.PASS)
+            self.assertIn("server.js", static_check.message)
+            self.assertIn("static code detection only", static_check.message.lower())
+
+    def test_javascript_health_route_trailing_slash_and_versioned(self):
+        """Verify trailing slash and versioned API health route patterns."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / "index.js").write_text(
+                "app.get('/api/v1/health/', (req, res) => res.send('OK'));\n",
+                encoding="utf-8",
+            )
+            results = run_endpoints_checks(td)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertIn("index.js", results[0].message)
+
+    def test_file_based_javascript_health_route(self):
+        """Verify file-based routing such as routes/health.js is detected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            routes_dir = td / "routes"
+            routes_dir.mkdir()
+            (routes_dir / "health.js").write_text(
+                "module.exports = (req, res) => res.json({ status: 'ok' });\n",
+                encoding="utf-8",
+            )
+            results = run_endpoints_checks(td)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertIn("routes/health.js", results[0].message)
+
 
 if __name__ == "__main__":
     unittest.main()
+

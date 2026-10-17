@@ -21,8 +21,9 @@ ENV_FILE_CANDIDATES = [
 # Regex matches valid variable name definitions, e.g.:
 # KEY=...
 # export KEY=...
+# KEY (in template files)
 # Ignores comments (#) and empty lines
-VAR_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+VAR_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*=|\s*$)")
 
 
 def extract_variable_names(file_path: Path) -> Set[str]:

@@ -53,6 +53,17 @@ class TestEnvironmentCheck(unittest.TestCase):
             self.assertEqual(results[0].status, CheckStatus.PASS)
             self.assertIn("All 2 variable(s)", results[0].message)
 
+    def test_template_standalone_keys_without_equals(self):
+        """Verify templates with keys defined without equals sign are parsed safely."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("PORT\nDATABASE_URL\n", encoding="utf-8")
+            (td / ".env").write_text("PORT=8080\nDATABASE_URL=postgres://localhost:5432\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(results[0].status, CheckStatus.PASS)
+            self.assertEqual(results[0].details["configured_variable_names"], ["DATABASE_URL", "PORT"])
+
     def test_template_and_env_missing_keys_warning(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = Path(tmpdir)

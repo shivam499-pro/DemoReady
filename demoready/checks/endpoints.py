@@ -21,7 +21,7 @@ IGNORED_DIRECTORIES = {
 SOURCE_EXTENSIONS = {".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx"}
 
 HEALTH_ROUTE_PATTERN = re.compile(
-    r"""['"`]/(?:api/)?(?:health|healthz|status|live|ready|ping)['"`]""",
+    r"""['"`]/(?:api/(?:v[0-9]+/)?|v[0-9]+/)?(?:health|healthz|status|live|ready|ping)/?['"`]""",
     re.IGNORECASE,
 )
 

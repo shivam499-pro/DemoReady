@@ -1,4 +1,12 @@
-"""Static endpoint detection and health check verification."""
+"""
+Static endpoint detection and health check verification.
+
+NOTE: Endpoint detection uses regex-based heuristics over source files, not a
+full JavaScript AST parser. It looks for standard HTTP route strings (e.g.
+'/health', '/status', '/api/health') and file-based route conventions.
+Dynamic route construction, variable interpolation, or non-standard routing
+decorators may not be detected by this heuristic.
+"""
 
 from pathlib import Path
 import re
@@ -94,10 +102,13 @@ def run_endpoints_checks(target_path: Path) -> List[CheckResult]:
                 category="endpoints",
                 status=CheckStatus.PASS,
                 message=(
-                    f"Static health route pattern detected in {sample_file}. "
+                    f"Static health route pattern detected in {sample_file} (heuristic match). "
                     "Note: This is static code detection only and does not verify runtime availability or HTTP response."
                 ),
-                details={"matching_files": health_files[:5]},
+                details={
+                    "matching_files": health_files[:5],
+                    "detection_type": "static_regex_heuristic",
+                },
             )
         )
     elif has_general_api:

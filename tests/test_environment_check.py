@@ -64,6 +64,33 @@ class TestEnvironmentCheck(unittest.TestCase):
             self.assertEqual(results[0].status, CheckStatus.PASS)
             self.assertEqual(results[0].details["configured_variable_names"], ["DATABASE_URL", "PORT"])
 
+    def test_unusual_env_formatting_and_prefixing(self):
+        """Verify quotes, export syntax, blank values, and comment styles (//, ;) are parsed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            env_content = (
+                "# Full-line hash comment\n"
+                "// Double-slash comment\n"
+                "; Semicolon comment\n"
+                "   # Leading whitespace comment\n"
+                'export "QUOTED_VAR"="secret_val"\n'
+                "'SINGLE_QUOTED_VAR'=12345\n"
+                "BLANK_VAR=\n"
+                "SPACED_KEY = value\n"
+                "INLINE_COMMENT_VAR=value # trailing comment\n"
+                "=MALFORMED_NO_KEY\n"
+            )
+            env_file = td / ".env"
+            env_file.write_text(env_content, encoding="utf-8")
+
+            names = extract_variable_names(env_file)
+            self.assertIn("QUOTED_VAR", names)
+            self.assertIn("SINGLE_QUOTED_VAR", names)
+            self.assertIn("BLANK_VAR", names)
+            self.assertIn("INLINE_COMMENT_VAR", names)
+            self.assertNotIn("MALFORMED_NO_KEY", names)
+            self.assertNotIn("secret_val", names)
+
     def test_template_and_env_missing_keys_warning(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = Path(tmpdir)

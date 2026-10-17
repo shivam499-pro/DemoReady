@@ -78,6 +78,19 @@ class TestCliIntegration(unittest.TestCase):
                 main(["--version"])
         self.assertEqual(cm.exception.code, 0)
 
+    def test_cli_invalid_timeout_rejected_without_traceback(self):
+        """Verify invalid timeout argument values are rejected with error and no traceback."""
+        for invalid_val in ["0", "-5"]:
+            with self.assertRaises(SystemExit) as cm:
+                with patch("sys.stderr", new_callable=io.StringIO) as mock_stderr:
+                    main(["--test-timeout", invalid_val])
+            # argparse exits with code 2 on argument error
+            self.assertEqual(cm.exception.code, 2)
+            err_output = mock_stderr.getvalue()
+            self.assertIn("error: --test-timeout must be a positive integer", err_output)
+            self.assertNotIn("Traceback", err_output)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "demoready"
+version = "0.1.0"
+description = "Pre-flight readiness and demonstration validator for Node.js projects"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "WeMakeDevs DemoReady Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+demoready = "demoready.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["demoready*"]

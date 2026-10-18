@@ -62,6 +62,8 @@ def check_test_script_configuration(pkg_data: Optional[Dict[str, Any]]) -> Check
             status=CheckStatus.FAIL,
             message=f"Placeholder test script detected: \"{test_cmd}\".",
             fix="Configure a real test runner instead of the npm default placeholder.",
+            # scripts.test key was confirmed present and inspected.
+            source_location={"file": "package.json", "field": "scripts.test"},
             details={"configured_command": test_cmd},
         )
 
@@ -70,6 +72,8 @@ def check_test_script_configuration(pkg_data: Optional[Dict[str, Any]]) -> Check
         category="testing",
         status=CheckStatus.PASS,
         message=f"Configured test command: \"{test_cmd}\".",
+        # scripts.test key was confirmed present and inspected.
+        source_location={"file": "package.json", "field": "scripts.test"},
         details={"configured_command": test_cmd},
     )
 

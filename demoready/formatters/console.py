@@ -13,10 +13,11 @@ SUPPORTS_COLOR = (
 )
 
 COLORS = {
-    CheckStatus.PASS: "\033[92m",        # Green
-    CheckStatus.WARNING: "\033[93m",     # Yellow
-    CheckStatus.FAIL: "\033[91m",        # Red
-    CheckStatus.NOT_CHECKED: "\033[90m", # Dim / Gray
+    CheckStatus.PASS: "\033[92m",          # Green
+    CheckStatus.WARNING: "\033[93m",       # Yellow
+    CheckStatus.FAIL: "\033[91m",          # Red
+    CheckStatus.NOT_CHECKED: "\033[90m",   # Dim / Gray
+    CheckStatus.NOT_APPLICABLE: "\033[90m",# Dim / Gray (same as NOT_CHECKED)
     "RESET": "\033[0m",
     "BOLD": "\033[1m",
     "CYAN": "\033[96m",
@@ -38,7 +39,7 @@ def format_console_report(report: InspectionReport) -> str:
     lines.append("-" * len(header))
 
     for check in report.results:
-        status_str = f"[{check.status.value}]".ljust(14)
+        status_str = f"[{check.status.value}]".ljust(18)
         colored_status = _colorize(status_str, check.status)
 
         prefix = f"{colored_status} {check.name}: "
@@ -56,6 +57,7 @@ def format_console_report(report: InspectionReport) -> str:
         f"{summary[CheckStatus.WARNING.value]} WARNING",
         f"{summary[CheckStatus.FAIL.value]} FAIL",
         f"{summary[CheckStatus.NOT_CHECKED.value]} NOT_CHECKED",
+        f"{summary[CheckStatus.NOT_APPLICABLE.value]} NOT_APPLICABLE",
     ]
     lines.append(f"Summary: {', '.join(summary_parts)}")
 

@@ -13,6 +13,16 @@ import re
 from typing import List, Optional, Tuple
 
 from demoready.core.models import CheckResult, CheckStatus
+from demoready.core.classifier import ProjectType
+
+
+# Project types for which HTTP health endpoints are not applicable.
+_NO_HEALTH_ENDPOINT_TYPES = frozenset({
+    ProjectType.REUSABLE_LIBRARY,
+    ProjectType.CLI_TOOL,
+    ProjectType.MONOREPO_ROOT,
+})
+
 
 
 IGNORED_DIRECTORIES = {
@@ -24,9 +34,44 @@ IGNORED_DIRECTORIES = {
     "coverage",
     ".turbo",
     ".cache",
+    "test",
+    "tests",
+    "__tests__",
+    "__test__",
+    "spec",
+    "specs",
 }
 
 SOURCE_EXTENSIONS = {".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx"}
+
+
+def is_test_file(filename: str) -> bool:
+    """
+    Check if a filename is an identifiable test or spec file.
+    Matches:
+    - Root test files: test.js, spec.ts, tests.js, specs.ts
+    - Prefix-style test files: test_health.js, test-health.ts, spec_auth.js, spec-auth.ts
+    - Suffix-style test files: health_test.ts, health-test.js, user_spec.ts
+    - Standard dot-test/dot-spec patterns: *.test.*, *.spec.*
+    Preserves regular production files like contest.js, protest.ts, special.ts, health.js.
+    """
+    lower = filename.lower()
+    # Keep the existing .test.* and .spec.* filtering in place
+    if ".test." in lower or ".spec." in lower:
+        return True
+
+    stem = lower.rsplit(".", 1)[0]
+    # 1. Exact match for test / spec base names (e.g. test.js, spec.ts)
+    if stem in ("test", "spec", "tests", "specs"):
+        return True
+    # 2. Prefix-style test files (e.g. test_health.js, test-health.ts, spec_auth.js)
+    if stem.startswith(("test_", "test-", "spec_", "spec-")):
+        return True
+    # 3. Suffix-style test files (e.g. health_test.ts, api-test.js)
+    if stem.endswith(("_test", "-test", "_spec", "-spec", "_tests", "-tests", "_specs", "-specs")):
+        return True
+    return False
+
 
 HEALTH_ROUTE_PATTERN = re.compile(
     r"""['"`]/(?:api/(?:v[0-9]+/)?|v[0-9]+/)?(?:health|healthz|status|live|ready|ping)/?['"`]""",
@@ -50,14 +95,18 @@ def scan_source_files(target_path: Path, max_files: int = 150) -> Tuple[List[str
 
     # Also check file-based routing: e.g. src/app/api/health/route.ts or routes/health.ts
     for file_path in target_path.rglob("*"):
-        # Skip ignored directories
-        if any(part in IGNORED_DIRECTORIES for part in file_path.parts):
+        # Skip ignored directories (including test and spec directories)
+        if any(part.lower() in IGNORED_DIRECTORIES for part in file_path.parts):
             continue
 
         if not file_path.is_file():
             continue
 
         if file_path.suffix.lower() not in SOURCE_EXTENSIONS:
+            continue
+
+        # Skip identifiable test files even if located in source directories (e.g., src/test_health.js)
+        if is_test_file(file_path.name):
             continue
 
         files_scanned += 1
@@ -85,11 +134,37 @@ def scan_source_files(target_path: Path, max_files: int = 150) -> Tuple[List[str
     return health_matches, has_general_api, files_scanned > 0
 
 
-def run_endpoints_checks(target_path: Path) -> List[CheckResult]:
+def run_endpoints_checks(
+    target_path: Path,
+    project_type: Optional[ProjectType] = None,
+) -> List[CheckResult]:
     """
     Run static endpoint checks and record honest status.
     Explicitly labels static detection separately from live verification.
     """
+    if project_type in _NO_HEALTH_ENDPOINT_TYPES:
+        type_label = project_type.value.replace("_", " ").title()
+        return [
+            CheckResult(
+                name="Static Health Endpoint Definition",
+                category="endpoints",
+                status=CheckStatus.NOT_APPLICABLE,
+                message=(
+                    f"Health endpoint checks are not applicable to {type_label} "
+                    f"projects (not a persistent web service or application)."
+                ),
+            ),
+            CheckResult(
+                name="Live Endpoint Verification",
+                category="endpoints",
+                status=CheckStatus.NOT_APPLICABLE,
+                message=(
+                    f"Live endpoint verification is not applicable to {type_label} "
+                    f"projects."
+                ),
+            ),
+        ]
+
     results: List[CheckResult] = []
 
     health_files, has_general_api, has_sources = scan_source_files(target_path)
@@ -105,6 +180,9 @@ def run_endpoints_checks(target_path: Path) -> List[CheckResult]:
                     f"Static health route pattern detected in {sample_file} (heuristic match). "
                     "Note: This is static code detection only and does not verify runtime availability or HTTP response."
                 ),
+                # Exact relative path of the matched source file.
+                # Detection was via regex heuristic only — not a full AST parse.
+                source_location={"file": sample_file},
                 details={
                     "matching_files": health_files[:5],
                     "detection_type": "static_regex_heuristic",

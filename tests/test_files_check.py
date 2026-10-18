@@ -86,6 +86,29 @@ class TestFilesCheck(unittest.TestCase):
             self.assertEqual(len(results), 3)
             self.assertTrue(all(r.status == CheckStatus.PASS for r in results))
 
+    def test_source_location_present_on_valid_package_json(self):
+        """Regression: package.json Validity PASS result carries source_location=
+        {"file": "package.json"} when the file was confirmed present and parsed.
+        FAIL / missing-file results must NOT carry a misleading source_location."""
+        import json
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / "package.json").write_text(
+                json.dumps({"name": "loc-test", "version": "1.2.3"}), encoding="utf-8"
+            )
+
+            results, pkg_data = run_files_checks(td)
+            validity_result = results[0]
+            self.assertEqual(validity_result.status, CheckStatus.PASS)
+            # source_location must be set and contain the filename only
+            self.assertIsNotNone(validity_result.source_location)
+            self.assertEqual(validity_result.source_location["file"], "package.json")
+
+        # Missing file case: source_location must not be set
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_missing, _ = run_files_checks(Path(tmpdir))
+            self.assertIsNone(results_missing[0].source_location)
+
 
 if __name__ == "__main__":
     unittest.main()

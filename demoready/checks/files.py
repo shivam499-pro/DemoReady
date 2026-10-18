@@ -64,6 +64,8 @@ def read_package_json(target_path: Path) -> Tuple[Optional[Dict[str, Any]], Opti
             category="required_files",
             status=CheckStatus.PASS,
             message=f"Valid package.json found (project: {parsed.get('name', 'unnamed')}, version: {parsed.get('version', 'unknown')}).",
+            # package.json was confirmed present and parsed; location is factual.
+            source_location={"file": "package.json"},
             details={
                 "name": parsed.get("name"),
                 "version": parsed.get("version"),

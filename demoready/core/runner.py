@@ -6,6 +6,7 @@ from demoready.checks.endpoints import run_endpoints_checks
 from demoready.checks.environment import run_environment_checks
 from demoready.checks.files import run_files_checks
 from demoready.checks.tests_config import run_tests_checks
+from demoready.core.classifier import classify_project
 from demoready.core.models import CheckResult, InspectionReport
 
 
@@ -33,15 +34,19 @@ def run_inspection(
     if not resolved_path.exists() or not resolved_path.is_dir():
         return InspectionReport(target_path=str(resolved_path), results=all_results)
 
-    # 2. Environment checks
-    env_results = run_environment_checks(resolved_path)
+    # 2. Project classification
+    classification = classify_project(resolved_path, pkg_data)
+    project_type = classification.project_type
+
+    # 3. Environment checks (context-aware based on project type)
+    env_results = run_environment_checks(resolved_path, project_type=project_type)
     all_results.extend(env_results)
 
-    # 3. Static endpoint checks
-    endpoint_results = run_endpoints_checks(resolved_path)
+    # 4. Static endpoint checks (context-aware based on project type)
+    endpoint_results = run_endpoints_checks(resolved_path, project_type=project_type)
     all_results.extend(endpoint_results)
 
-    # 4. Test configuration & optional opt-in execution
+    # 5. Test configuration & optional opt-in execution
     test_results = run_tests_checks(
         resolved_path,
         pkg_data=pkg_data,
@@ -50,4 +55,8 @@ def run_inspection(
     )
     all_results.extend(test_results)
 
-    return InspectionReport(target_path=str(resolved_path), results=all_results)
+    return InspectionReport(
+        target_path=str(resolved_path),
+        results=all_results,
+        project_type=project_type.value,
+    )

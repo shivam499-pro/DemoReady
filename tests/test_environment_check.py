@@ -259,6 +259,38 @@ class TestEnvironmentCheck(unittest.TestCase):
                     self.assertNotIn(env_secret, r.fix)
                     self.assertNotIn(env_local_secret, r.fix)
 
+    def test_source_location_env_filenames_only_never_values(self):
+        """Regression 5: env parity results carry source_location containing
+        only filenames.  Secret values from .env / .env.local must never appear
+        in source_location, console output, or JSON output."""
+        env_secret = "ENV_SECRET_VALUE_AAAAA"
+        local_secret = "LOCAL_SECRET_VALUE_BBBBB"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = Path(tmpdir)
+            (td / ".env.example").write_text("SECRET_A=\nSECRET_B=\n", encoding="utf-8")
+            (td / ".env").write_text(f"SECRET_A={env_secret}\n", encoding="utf-8")
+            (td / ".env.local").write_text(f"SECRET_B={local_secret}\n", encoding="utf-8")
+
+            results = run_environment_checks(td)
+            self.assertEqual(len(results), 1)
+            result = results[0]
+
+            # source_location must be present and contain filenames only
+            self.assertIsNotNone(result.source_location)
+            sl_str = json.dumps(result.source_location)
+            self.assertIn(".env.example", sl_str)
+            self.assertNotIn(env_secret, sl_str, "env secret leaked into source_location")
+            self.assertNotIn(local_secret, sl_str, "env.local secret leaked into source_location")
+
+            # Verify secrets absent from full report outputs
+            report = InspectionReport(target_path=str(td), results=results)
+            console_out = format_console_report(report)
+            json_out = format_json_report(report)
+            for secret in [env_secret, local_secret]:
+                self.assertNotIn(secret, console_out, f"Secret in console: {secret}")
+                self.assertNotIn(secret, json_out, f"Secret in JSON: {secret}")
+
 
 if __name__ == "__main__":
     unittest.main()

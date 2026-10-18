@@ -123,6 +123,39 @@ class TestTestsConfigCheck(unittest.TestCase):
             self.assertIn("timed out after 10 seconds", exec_check.message)
             self.assertIn("--test-timeout", exec_check.fix)
 
+    def test_source_location_placeholder_fail(self):
+        """Regression 2: placeholder-FAIL result carries source_location pointing to
+        scripts.test — the exact field that was inspected."""
+        pkg = {
+            "name": "sample",
+            "scripts": {"test": 'echo "Error: no test specified" && exit 1'},
+        }
+        res = check_test_script_configuration(pkg)
+        self.assertEqual(res.status, CheckStatus.FAIL)
+        self.assertIsNotNone(res.source_location)
+        self.assertEqual(res.source_location["file"], "package.json")
+        self.assertEqual(res.source_location["field"], "scripts.test")
+
+    def test_source_location_real_runner_pass(self):
+        """Regression 3: real-runner PASS result also carries source_location so
+        downstream tools don't need special-casing for PASS vs FAIL.
+        Missing-test-key WARNING must NOT carry source_location (field not inspected)."""
+        pkg_pass = {
+            "name": "sample",
+            "scripts": {"test": "jest --ci"},
+        }
+        res_pass = check_test_script_configuration(pkg_pass)
+        self.assertEqual(res_pass.status, CheckStatus.PASS)
+        self.assertIsNotNone(res_pass.source_location)
+        self.assertEqual(res_pass.source_location["file"], "package.json")
+        self.assertEqual(res_pass.source_location["field"], "scripts.test")
+
+        # No 'test' key: source_location must be absent
+        pkg_no_key = {"name": "sample", "scripts": {}}
+        res_warn = check_test_script_configuration(pkg_no_key)
+        self.assertEqual(res_warn.status, CheckStatus.WARNING)
+        self.assertIsNone(res_warn.source_location)
+
 
 if __name__ == "__main__":
     unittest.main()
